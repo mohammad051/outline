@@ -16,13 +16,8 @@ import {Localizer} from '@outline/infrastructure/i18n';
 import * as net from '@outline/infrastructure/net';
 
 import {staticKeyToTunnelConfig} from './access_key';
-import {
-  TunnelConfigJson,
-  TransportConfigJson,
-  VpnApi,
-  StartRequestJson,
-  getAddressFromTransportConfig,
-} from './vpn';
+import {TunnelConfigJson, TransportConfigJson, getAddressFromTransportConfig} from './config';
+import {VpnApi, StartRequestJson} from './vpn';
 import * as errors from '../../model/errors';
 import {PlatformError} from '../../model/platform_error';
 import {Server, ServerType} from '../../model/server';
@@ -149,13 +144,17 @@ function parseTunnelConfigJson(responseBody: string): TunnelConfigJson | null {
   }
 
   const transport: TransportConfigJson = {
-    host: responseJson.server,
-    port: responseJson.server_port,
-    method: responseJson.method,
-    password: responseJson.password,
+    type: 'shadowsocks',
+    endpoint: {
+      type: 'dial',
+      host: responseJson.server,
+      port: responseJson.server_port, 
+    },
+    cipher: responseJson.method,
+    secret: responseJson.password,
   };
   if (responseJson.prefix) {
-    (transport as {prefix?: string}).prefix = responseJson.prefix;
+    transport.prefix = responseJson.prefix;
   }
   return {
     transport,

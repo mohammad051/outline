@@ -22,10 +22,14 @@ describe('parseTunnelConfigJson', () => {
       )
     ).toEqual({
       transport: {
-        host: 'example.com',
-        port: 443,
-        method: 'METHOD',
-        password: 'PASSWORD',
+        type: 'shadowsocks',
+        endpoint: {
+          type: 'dial',
+          host: 'example.com',
+          port: 443,
+        },
+        cipher: 'METHOD',
+        secret: 'PASSWORD',
       },
     });
   });
@@ -37,10 +41,14 @@ describe('parseTunnelConfigJson', () => {
       )
     ).toEqual({
       transport: {
-        host: 'example.com',
-        port: 443,
-        method: 'METHOD',
-        password: 'PASSWORD',
+        type: 'shadowsocks',
+        endpoint: {
+          type: 'dial',
+          host: 'example.com',
+          port: 443,
+        },
+        cipher: 'METHOD',
+        secret: 'PASSWORD',
         prefix: 'POST ',
       },
     });

@@ -14,7 +14,7 @@
 
 import {SHADOWSOCKS_URI} from 'ShadowsocksConfig';
 
-import {TunnelConfigJson} from './vpn';
+import {TunnelConfigJson} from './config';
 import * as errors from '../../model/errors';
 
 /** Parses an access key string into a TunnelConfig object. */
@@ -23,10 +23,14 @@ export function staticKeyToTunnelConfig(staticKey: string): TunnelConfigJson {
     const config = SHADOWSOCKS_URI.parse(staticKey);
     return {
       transport: {
-        host: config.host.data,
-        port: config.port.data,
-        method: config.method.data,
-        password: config.password.data,
+        type: 'shadowsocks',
+        endpoint: {
+          type: 'dial',
+          host: config.host.data,
+          port: config.port.data,
+        },
+        cipher: config.method.data,
+        secret: config.password.data,
         prefix: config.extra?.['prefix'],
       },
     };

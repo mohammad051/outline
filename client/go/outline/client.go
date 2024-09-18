@@ -56,6 +56,7 @@ func NewClientAndReturnError(transportConfig string) *NewClientResult {
 //
 // Deprecated: Use [NewClientAndReturnError] instead.
 func NewClient(transportConfig string) (*Client, error) {
+	// TODO: use normalized format.
 	config, err := parseConfigFromJSON(transportConfig)
 	if err != nil {
 		return nil, err
