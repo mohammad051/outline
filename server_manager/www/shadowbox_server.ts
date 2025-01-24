@@ -57,6 +57,7 @@ function makeAccessKeyModel(apiAccessKey: AccessKeyJson): server.AccessKey {
 export class ShadowboxServer implements server.Server {
   private api: PathApiClient;
   private serverConfig: ServerConfigJson;
+  private _supportedExperimentalEndpointCache: Set<string>;
 
   constructor(private readonly id: string) {}
 
@@ -149,20 +150,64 @@ export class ShadowboxServer implements server.Server {
     await this.api.request<void>(`access-keys/${keyId}/data-limit`, 'DELETE');
   }
 
-  async getDataUsage(): Promise<server.BytesByAccessKey> {
+  async getServerMetrics(): Promise<server.ServerMetricsJson> {
+    if (
+      (await this.getSupportedExperimentalEndpoints()).has('server/metrics')
+    ) {
+      return this.api.request<server.ServerMetricsJson>(
+        'experimental/server/metrics?since=30d'
+      );
+    }
+
+    const result: server.ServerMetricsJson = {
+      server: [],
+      accessKeys: [],
+    };
+
     const jsonResponse =
       await this.api.request<DataUsageByAccessKeyJson>('metrics/transfer');
-    const usageMap = new Map<server.AccessKeyId, number>();
+
     for (const [accessKeyId, bytes] of Object.entries(
       jsonResponse.bytesTransferredByUserId
     )) {
-      usageMap.set(accessKeyId, bytes ?? 0);
+      result.accessKeys.push({
+        accessKeyId: Number(accessKeyId),
+        dataTransferred: {bytes},
+      });
     }
-    return usageMap;
+
+    return result;
   }
 
   getName(): string {
     return this.serverConfig?.name;
+  }
+
+  async getSupportedExperimentalEndpoints(): Promise<Set<string>> {
+    if (this._supportedExperimentalEndpointCache) {
+      return this._supportedExperimentalEndpointCache;
+    }
+
+    const result = new Set<string>();
+
+    if (!this.api) return result;
+
+    try {
+      await this.api.request<server.ServerMetricsJson>(
+        'experimental/server/metrics?since=30d',
+        'HEAD'
+      );
+      result.add('server/metrics');
+    } catch (error) {
+      // endpoint is not defined, keep set to false
+      if (error.response?.status !== 404) {
+        result.add('server/metrics');
+      }
+    }
+
+    this._supportedExperimentalEndpointCache = result;
+
+    return result;
   }
 
   async setName(name: string): Promise<void> {
@@ -262,6 +307,10 @@ export class ShadowboxServer implements server.Server {
 
   protected setManagementApi(api: PathApiClient): void {
     this.api = api;
+
+    // re-populate the supported endpoint cache
+    this._supportedExperimentalEndpointCache = null;
+    this.getSupportedExperimentalEndpoints();
   }
 
   getManagementApiUrl(): string {

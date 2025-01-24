@@ -168,6 +168,16 @@ export class FakeServer implements server.Server {
   getDataUsage() {
     return Promise.resolve(new Map<server.AccessKeyId, number>());
   }
+  getServerMetrics(): Promise<server.ServerMetricsJson> {
+    return Promise.reject(
+      new Error('FakeServer.getServerMetrics not implemented')
+    );
+  }
+  getSupportedExperimentalEndpoints(): Promise<Set<string>> {
+    return Promise.reject(
+      new Error('FakeServer.getSupportedExperimentalEndpoints not implemented')
+    );
+  }
   addAccessKey() {
     const accessKey = {
       id: Math.floor(Math.random()).toString(),
@@ -245,6 +255,38 @@ export class FakeManualServer
   }
   getCertificateFingerprint() {
     return this.manualServerConfig.certSha256;
+  }
+  getSupportedExperimentalEndpoints(): Promise<Set<string>> {
+    return Promise.resolve(new Set());
+  }
+  async getServerMetrics() {
+    if (
+      (await this.getSupportedExperimentalEndpoints()).has('server/metrics')
+    ) {
+      return {
+        server: [
+          {
+            location: 'US',
+            asn: 10000,
+            asOrg: 'Fake AS',
+          },
+        ],
+        accessKeys: [
+          {
+            accessKeyId: 0,
+          },
+        ],
+      };
+    }
+
+    return {
+      server: [],
+      accessKeys: [
+        {
+          accessKeyId: 0,
+        },
+      ],
+    };
   }
 }
 
