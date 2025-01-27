@@ -22,16 +22,11 @@ import (
 
 // API name constants
 const (
-	// FetchResource fetches a resource located at a given URL.
-	//  - Input: the URL string of the resource to fetch
-	//  - Output: the content in raw string of the fetched resource
-	MethodFetchResource = "FetchResource"
-
-	// EstablishVPN initiates a VPN connection and directs all network traffic through Outline.
+	// AddEventListener registers a callback for a specific event.
 	//
-	//  - Input: a JSON string of vpn.configJSON.
-	//  - Output: a JSON string of vpn.connectionJSON.
-	MethodEstablishVPN = "EstablishVPN"
+	//  - Input: a JSON string of eventListenerJSON
+	//  - Output: null
+	MethodAddEventListener = "AddEventListener"
 
 	// CloseVPN closes an existing VPN connection and restores network traffic to the default
 	// network interface.
@@ -39,6 +34,23 @@ const (
 	//  - Input: null
 	//  - Output: null
 	MethodCloseVPN = "CloseVPN"
+
+	// EstablishVPN initiates a VPN connection and directs all network traffic through Outline.
+	//
+	//  - Input: a JSON string of vpnConfigJSON
+	//  - Output: null
+	MethodEstablishVPN = "EstablishVPN"
+
+	// FetchResource fetches a resource located at a given URL.
+	//  - Input: the URL string of the resource to fetch
+	//  - Output: the content in raw string of the fetched resource
+	MethodFetchResource = "FetchResource"
+
+	// RemoveEventListener unregisters a callback from a specific event.
+	//
+	//  - Input: a JSON string of eventListenerJSON
+	//  - Output: null
+	MethodRemoveEventListener = "RemoveEventListener"
 )
 
 // InvokeMethodResult represents the result of an InvokeMethod call.
@@ -52,11 +64,15 @@ type InvokeMethodResult struct {
 // InvokeMethod calls a method by name.
 func InvokeMethod(method string, input string) *InvokeMethodResult {
 	switch method {
-	case MethodFetchResource:
-		url := input
-		content, err := fetchResource(url)
+	case MethodAddEventListener:
+		err := addEventListener(input)
 		return &InvokeMethodResult{
-			Value: content,
+			Error: platerrors.ToPlatformError(err),
+		}
+
+	case MethodCloseVPN:
+		err := closeVPN()
+		return &InvokeMethodResult{
 			Error: platerrors.ToPlatformError(err),
 		}
 
@@ -66,8 +82,16 @@ func InvokeMethod(method string, input string) *InvokeMethodResult {
 			Error: platerrors.ToPlatformError(err),
 		}
 
-	case MethodCloseVPN:
-		err := closeVPN()
+	case MethodFetchResource:
+		url := input
+		content, err := fetchResource(url)
+		return &InvokeMethodResult{
+			Value: content,
+			Error: platerrors.ToPlatformError(err),
+		}
+
+	case MethodRemoveEventListener:
+		err := removeEventListener(input)
 		return &InvokeMethodResult{
 			Error: platerrors.ToPlatformError(err),
 		}

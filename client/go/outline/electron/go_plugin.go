@@ -29,6 +29,22 @@ typedef struct InvokeMethodResult_t
 	// This error can be parsed by the PlatformError in TypeScript.
 	const char *ErrorJson;
 } InvokeMethodResult;
+
+// CallbackFuncPtr is a C function pointer type that represents a callback function.
+// This callback function will be invoked by the Go side.
+//
+// - data: The callback data, passed as a C string (typically a JSON string).
+typedef const char* (*CallbackFuncPtr)(const char *data);
+
+// InvokeCallback is a helper function that invokes the C callback function pointer.
+//
+// This function serves as a bridge, allowing Go to call a C function pointer.
+//
+// - f: The C function pointer to be invoked.
+// - data: A C-string typed data to be passed to the callback.
+static const char* InvokeCallback(CallbackFuncPtr f, const char *data) {
+  return f(data);
+}
 */
 import "C"
 import (
@@ -38,6 +54,7 @@ import (
 	"unsafe"
 
 	"github.com/Jigsaw-Code/outline-apps/client/go/outline"
+	"github.com/Jigsaw-Code/outline-apps/client/go/outline/callback"
 	"github.com/Jigsaw-Code/outline-apps/client/go/outline/platerrors"
 )
 
@@ -55,6 +72,37 @@ func InvokeMethod(method *C.char, input *C.char) C.InvokeMethodResult {
 		Output:    newCGoString(result.Value),
 		ErrorJson: marshalCGoErrorJson(result.Error),
 	}
+}
+
+// cgoCallback implements the [callback.Callback] interface and bridges the Go callback
+// to a C function pointer.
+type cgoCallback struct {
+	ptr C.CallbackFuncPtr
+}
+
+var _ callback.Callback = (*cgoCallback)(nil)
+
+// OnCall forwards the data to the C callback function pointer.
+func (ccb *cgoCallback) OnCall(data string) string {
+	ret := C.InvokeCallback(ccb.ptr, newCGoString(data))
+	return C.GoString(ret)
+}
+
+// NewCallback registers a new callback function and returns a [callback.Token] number.
+//
+// The caller can delete the callback by calling [DeleteCallback] with the returned token.
+//
+//export NewCallback
+func NewCallback(cb C.CallbackFuncPtr) C.int {
+	token := callback.New(&cgoCallback{cb})
+	return C.int(token)
+}
+
+// DeleteCallback deletes the callback identified by the token returned by [NewCallback].
+//
+//export DeleteCallback
+func DeleteCallback(token C.int) {
+	callback.Delete(callback.Token(token))
 }
 
 // newCGoString allocates memory for a C string based on the given Go string.

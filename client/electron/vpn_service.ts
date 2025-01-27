@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-import {invokeGoMethod} from './go_plugin';
+import {invokeGoMethod, newCallback} from './go_plugin';
 import {
   StartRequestJson,
   TunnelStatus,
@@ -35,15 +35,10 @@ interface EstablishVpnRequest {
   transport: string;
 }
 
-let currentRequestId: string | undefined = undefined;
-
 export async function establishVpn(request: StartRequestJson) {
-  currentRequestId = request.id;
-  statusCb?.(currentRequestId, TunnelStatus.RECONNECTING);
-
   const config: EstablishVpnRequest = {
     vpn: {
-      id: currentRequestId,
+      id: request.id,
 
       // TUN device name, being compatible with old code:
       // https://github.com/Jigsaw-Code/outline-apps/blob/client/linux/v1.14.0/client/electron/linux_proxy_controller/outline_proxy_controller.h#L203
@@ -72,19 +67,73 @@ export async function establishVpn(request: StartRequestJson) {
   };
 
   await invokeGoMethod('EstablishVPN', JSON.stringify(config));
-  statusCb?.(currentRequestId, TunnelStatus.CONNECTED);
 }
 
 export async function closeVpn(): Promise<void> {
-  statusCb?.(currentRequestId!, TunnelStatus.DISCONNECTING);
   await invokeGoMethod('CloseVPN', '');
-  statusCb?.(currentRequestId!, TunnelStatus.DISCONNECTED);
 }
 
 export type VpnStatusCallback = (id: string, status: TunnelStatus) => void;
 
-let statusCb: VpnStatusCallback | undefined = undefined;
+/**
+ * Registers a callback function to be invoked when the VPN status changes.
+ *
+ * @param cb - The callback function to be invoked when the VPN status changes.
+ *             The callback will receive the VPN connection ID as well as the new status.
+ *
+ * @remarks The caller should subscribe to this event **only once**.
+ *          Use the `id` parameter in the callback to identify the firing VPN connection.
+ */
+export async function onVpnStatusChanged(cb: VpnStatusCallback): Promise<void> {
+  if (!cb) {
+    return;
+  }
 
-export function onVpnStatusChanged(cb: VpnStatusCallback): void {
-  statusCb = cb;
+  const cbToken = await newCallback(data => {
+    const conn = JSON.parse(data) as VPNConnectionState;
+    console.debug(`received ${StatusChangedEvent}`, conn);
+    switch (conn?.status) {
+      case VPNConnConnected:
+        cb(conn.id, TunnelStatus.CONNECTED);
+        break;
+      case VPNConnConnecting:
+        cb(conn.id, TunnelStatus.RECONNECTING);
+        break;
+      case VPNConnDisconnecting:
+        cb(conn.id, TunnelStatus.DISCONNECTING);
+        break;
+      case VPNConnDisconnected:
+        cb(conn.id, TunnelStatus.DISCONNECTED);
+        break;
+    }
+    return '';
+  });
+
+  await invokeGoMethod(
+    'AddEventListener',
+    JSON.stringify({
+      name: StatusChangedEvent,
+      callbackToken: cbToken,
+    })
+  );
 }
+
+//#region type definitions of VPNConnection in Go
+
+// The following constants and types should be aligned with the corresponding definitions
+// in `./client/go/outline/vpn/vpn.go`.
+
+const StatusChangedEvent = 'VPNConnStatusChanged';
+
+type VPNConnStatus = string;
+const VPNConnConnecting: VPNConnStatus = 'Connecting';
+const VPNConnConnected: VPNConnStatus = 'Connected';
+const VPNConnDisconnecting: VPNConnStatus = 'Disconnecting';
+const VPNConnDisconnected: VPNConnStatus = 'Disconnected';
+
+interface VPNConnectionState {
+  readonly id: string;
+  readonly status: VPNConnStatus;
+}
+
+//#endregion type definitions of VPNConnection in Go

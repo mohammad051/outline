@@ -18,8 +18,6 @@ import koffi from 'koffi';
 
 import {pathToBackendLibrary} from './app_paths';
 
-let invokeMethodFunc: Function | undefined;
-
 /**
  * Calls a Go function by invoking the `InvokeMethod` function in the native backend library.
  *
@@ -36,7 +34,99 @@ export async function invokeGoMethod(
   method: string,
   input: string
 ): Promise<string> {
-  if (!invokeMethodFunc) {
+  console.debug(`[Backend] - calling InvokeMethod "${method}" ...`);
+  const result = await ensureCgo().invokeMethod(method, input);
+  console.debug(`[Backend] - InvokeMethod "${method}" returned`, result);
+  if (result.ErrorJson) {
+    throw new Error(result.ErrorJson);
+  }
+  return result.Output;
+}
+
+/**
+ * Represents a function that will be called from the Go backend.
+ * @param data The data string passed from the Go backend.
+ * @returns A result string that will be passed back to the caller.
+ */
+export type CallbackFunction = (data: string) => string;
+
+/** A unique token for a callback created by `newCallback`. */
+export type CallbackToken = number;
+
+/**
+ * Koffi requires us to register all persistent callbacks; we track the registrations here.
+ * @see https://koffi.dev/callbacks#registered-callbacks
+ */
+const koffiCallbacks = new Map<CallbackToken, koffi.IKoffiRegisteredCallback>();
+
+/**
+ * Registers a callback function in TypeScript, making it invokable from Go.
+ *
+ * The caller can delete the callback by calling `deleteCallback`.
+ *
+ * @param callback The callback function to be registered.
+ * @returns A Promise resolves to the callback token, which can be used to refer to the callback.
+ */
+export async function newCallback(
+  callback: CallbackFunction
+): Promise<CallbackToken> {
+  console.debug('[Backend] - calling newCallback ...');
+  const persistentCallback = koffi.register(
+    callback,
+    ensureCgo().callbackFuncPtr
+  );
+  const token = await ensureCgo().newCallback(persistentCallback);
+  console.debug('[Backend] - newCallback done, token:', token);
+  koffiCallbacks.set(token, persistentCallback);
+  return token;
+}
+
+/**
+ * Unregisters a specified callback function from the Go backend.
+ *
+ * @param token The callback token returned from `newCallback`.
+ * @returns A Promise that resolves when the unregistration is done.
+ */
+export async function deleteCallback(token: CallbackToken): Promise<void> {
+  console.debug('[Backend] - calling deleteCallback:', token);
+  await ensureCgo().deleteCallback(token);
+  console.debug('[Backend] - deleteCallback done');
+  const persistentCallback = koffiCallbacks.get(token);
+  if (persistentCallback) {
+    koffi.unregister(persistentCallback);
+    koffiCallbacks.delete(token);
+    console.debug(
+      `[Backend] - unregistered persistent callback ${token} from koffi`
+    );
+  }
+}
+
+/** Interface containing the exported native CGo functions. */
+interface CgoFunctions {
+  // InvokeMethodResult InvokeMethod(char* method, char* input);
+  invokeMethod: Function;
+
+  // void (*CallbackFuncPtr)(const char *data);
+  callbackFuncPtr: koffi.IKoffiCType;
+
+  // InvokeMethodResult NewCallback(CallbackFuncPtr cb);
+  newCallback: Function;
+
+  // void DeleteCallback(char* token);
+  deleteCallback: Function;
+}
+
+/** Singleton of the loaded native CGo functions. */
+let cgo: CgoFunctions | undefined;
+
+/**
+ * Ensures that the CGo functions are loaded and initialized, returning the singleton instance.
+ *
+ * @returns The loaded CGo functions singleton.
+ */
+function ensureCgo(): CgoFunctions {
+  if (!cgo) {
+    console.debug('[Backend] - initializing cgo environment ...');
     const backendLib = koffi.load(pathToBackendLibrary());
 
     // Define C strings and setup auto release
@@ -51,16 +141,24 @@ export async function invokeGoMethod(
       Output: cgoString,
       ErrorJson: cgoString,
     });
-    invokeMethodFunc = promisify(
+    const invokeMethod = promisify(
       backendLib.func('InvokeMethod', invokeMethodResult, ['str', 'str']).async
     );
-  }
 
-  console.debug(`[Backend] - calling InvokeMethod "${method}" ...`);
-  const result = await invokeMethodFunc(method, input);
-  console.debug(`[Backend] - InvokeMethod "${method}" returned`, result);
-  if (result.ErrorJson) {
-    throw Error(result.ErrorJson);
+    // Define callback data structures and functions
+    const callbackFuncPtr = koffi.pointer(
+      koffi.proto('CallbackFuncPtr', 'str', [cgoString])
+    );
+    const newCallback = promisify(
+      backendLib.func('NewCallback', 'int', [callbackFuncPtr]).async
+    );
+    const deleteCallback = promisify(
+      backendLib.func('DeleteCallback', 'void', ['int']).async
+    );
+
+    // Cache them so we don't have to reload these functions
+    cgo = {invokeMethod, callbackFuncPtr, newCallback, deleteCallback};
+    console.debug('[Backend] - cgo environment initialized');
   }
-  return result.Output;
+  return cgo;
 }
