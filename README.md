@@ -15,5 +15,6 @@ Interested in **contributing to Outline?** See our [Contributing Guide](CONTRIBU
 You can also **join the Outline Community** by signing up for the [IFF Mattermost](https://wiki.digitalrights.community/index.php?title=IFF_Mattermost)!
 
 For customer support and to **contact us directly**, go to https://support.getoutline.org.
-
+```
 sudo bash -c "$(wget -qO- https://raw.githubusercontent.com/mohammad051/outline/refs/heads/master/server_manager/install_scripts/install_server.sh)"
+```
