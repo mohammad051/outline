@@ -16,4 +16,4 @@ You can also **join the Outline Community** by signing up for the [IFF Mattermos
 
 For customer support and to **contact us directly**, go to https://support.getoutline.org.
 
-https://raw.githubusercontent.com/mohammad051/outline/refs/heads/master/server_manager/install_scripts/install_server.sh
+sudo bash -c "$(wget -qO- https://raw.githubusercontent.com/mohammad051/outline/refs/heads/master/server_manager/install_scripts/install_server.sh)"
